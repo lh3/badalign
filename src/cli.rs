@@ -29,6 +29,6 @@ pub struct Args {
     pub min_clip: usize,
 
     /// Minimum number of high-quality mismatches in a window (type-2).
-    #[arg(short = 'm', value_name = "INT", default_value_t = 5)]
+    #[arg(short = 'm', value_name = "INT", default_value_t = 10)]
     pub min_mismatch: usize,
 }

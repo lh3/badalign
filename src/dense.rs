@@ -1,30 +1,28 @@
 //! Type-2 (D) lines: mismatch-dense regions of one alignment record.
 
 use crate::align::{extract, Aln};
-use crate::mismatch::Site;
 use std::io::{self, Write};
 
-/// Map substitution sites to read-forward positions, keeping only high-quality
-/// ones. `lead_hard` is the record's leading hard-clip length (0 for a primary).
+/// Map mismatch events `(rec_q, baseq)` to sorted read-forward positions, keeping
+/// only high-quality ones. `rec_q` indexes the record SEQ; `lead_hard` is the
+/// record's leading hard-clip length (0 for a primary).
 pub fn hq_positions(
-    sites: &[Site],
-    qual: &[u8],
+    events: &[(usize, u8)],
     strand: u8,
     read_len: usize,
     lead_hard: usize,
     min_baseq: u8,
 ) -> Vec<usize> {
-    let mut pos: Vec<usize> = sites
+    let mut pos: Vec<usize> = events
         .iter()
-        .filter_map(|s| {
-            let bq = qual.get(s.rec_q).copied().unwrap_or(0);
+        .filter_map(|&(rec_q, bq)| {
             if bq < min_baseq {
                 return None;
             }
             let fwd = if strand == b'+' {
-                lead_hard + s.rec_q
+                lead_hard + rec_q
             } else {
-                read_len - 1 - lead_hard - s.rec_q
+                read_len - 1 - lead_hard - rec_q
             };
             Some(fwd)
         })

@@ -28,7 +28,7 @@ Options:
   -Q INT    min base quality for a mismatch to count (type-2) [20]
   -w INT    window length to scan for a dense region (type-2) [100]
   -c INT    min clip length to report (type-1) [40]
-  -m INT    min mismatches in a window (type-2) [5]
+  -m INT    min mismatches in a window (type-2) [10]
 ```
 
 Output goes to stdout.
@@ -72,6 +72,13 @@ D  readName readLen extractStart extractEnd denseStart denseEnd extractSeq
   mismatch of a qualifying stretch; overlapping windows are merged).
 - `extractStart/End` add `-l` bp of flanking either side of the dense region.
 - The remaining columns describe the alignment the region belongs to.
+
+A "mismatch" here is either a **substitution** (base quality ≥ `-Q` at that base) or
+a **gap open** — one event per insertion/deletion regardless of length (gap
+*extensions* don't count; introns/`N` are not gaps). A gap's base quality is the
+highest quality among the bases in the gap plus the read bases immediately before
+and after it (a deletion has no bases in the gap, so just its two flanks), and it
+counts when that quality is ≥ `-Q`.
 
 ## Type-2 requirements
 

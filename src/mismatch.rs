@@ -1,9 +1,12 @@
-//! Enumerate substitution sites of one alignment record from whichever source
-//! is available, in priority order: reference FASTA > cs tag > MD tag > CIGAR X.
+//! Enumerate mismatch events of one alignment record.
 //!
-//! A site is `(rec_q, ref_pos)` where `rec_q` indexes the record SEQ (ref-forward
-//! orientation, so it also indexes the record's QUAL) and `ref_pos` is 0-based on
-//! the contig. Indels are ignored — only substitutions count.
+//! Substitutions come from whichever source is available, in priority order:
+//! reference FASTA > cs tag > MD tag > CIGAR X. A `Site` is `(rec_q, ref_pos)` where
+//! `rec_q` indexes the record SEQ (ref-forward orientation, so it also indexes the
+//! record's QUAL) and `ref_pos` is 0-based on the contig.
+//!
+//! Gap opens (one event per `I`/`D` op, regardless of length) come straight from the
+//! CIGAR via [`gap_events`]; introns (`N`) are not gaps.
 
 use crate::align::CigarOps;
 
@@ -76,6 +79,41 @@ pub fn from_cigar_x(ops: &CigarOps) -> Vec<Site> {
             b'I' | b'S' => q += len,
             b'D' | b'N' => r += len,
             _ => {}
+        }
+    }
+    out
+}
+
+/// Enumerate gap-open events (one per `I`/`D` op; length is ignored, so gap
+/// *extensions* don't count). Returns `(rec_q, baseq)` where `rec_q` is the SEQ
+/// index at the gap and `baseq` is the gap's base quality: the highest quality
+/// among the read bases in the gap plus the read bases immediately before/after.
+/// A deletion has no read bases in the gap, so it uses only its two flanks.
+/// Introns (`N`) are not gaps.
+pub fn gap_events(ops: &CigarOps, qual: &[u8]) -> Vec<(usize, u8)> {
+    let mut out = Vec::new();
+    let mut q = 0usize; // SEQ index
+    for &(len, k) in ops {
+        match k {
+            b'I' => {
+                // inserted read bases [q, q+len), plus flanks q-1 and q+len
+                let lo = q.saturating_sub(1);
+                let hi = (q + len + 1).min(qual.len());
+                if let Some(bq) = qual.get(lo..hi).and_then(|s| s.iter().copied().max()) {
+                    out.push((q, bq));
+                }
+                q += len;
+            }
+            b'D' => {
+                // no read bases in the gap; flanks are q-1 and q
+                let lo = q.saturating_sub(1);
+                let hi = (q + 1).min(qual.len());
+                if let Some(bq) = qual.get(lo..hi).and_then(|s| s.iter().copied().max()) {
+                    out.push((q, bq));
+                }
+            }
+            b'M' | b'=' | b'X' | b'S' => q += len,
+            _ => {} // N, H, P
         }
     }
     out
@@ -273,6 +311,46 @@ mod tests {
         let ops = parse_cigar_str(b"3M1X4M").unwrap();
         let sites = super::from_cigar_x(&ops);
         assert_eq!(qpos(&sites), vec![3]);
+    }
+
+    #[test]
+    fn gap_insertion_uses_max_over_gap_and_flanks() {
+        // 3M 2I 3M ; qual per SEQ base (len 8).
+        let ops = parse_cigar_str(b"3M2I3M").unwrap();
+        // indices:           0  1  2 | 3  4 | 5  6  7
+        let qual = &[10u8, 10, 30, 5, 5, 40, 10, 10]; // flanks 30 (idx2) & 40 (idx5)
+        let ev = super::gap_events(&ops, qual);
+        // one insertion event at rec_q=3, baseq = max(idx2..=idx5) = 40
+        assert_eq!(ev, vec![(3, 40)]);
+    }
+
+    #[test]
+    fn gap_deletion_uses_two_flanks() {
+        // 3M 2D 3M ; deletion consumes no query, event at rec_q=3.
+        let ops = parse_cigar_str(b"3M2D3M").unwrap();
+        let qual = &[10u8, 10, 25, 33, 10, 10]; // flanks idx2=25, idx3=33
+        let ev = super::gap_events(&ops, qual);
+        assert_eq!(ev, vec![(3, 33)]);
+    }
+
+    #[test]
+    fn gap_length_is_ignored_one_event_each() {
+        let ops = parse_cigar_str(b"5M3I5M4D5M").unwrap();
+        let qual = &[20u8; 22]; // 5+3+5+5 = 18 SEQ bases... pad extra is fine
+        let ev = super::gap_events(&ops, qual);
+        // insertion at 5, deletion at 5+3+5=13
+        assert_eq!(ev, vec![(5, 20), (13, 20)]);
+    }
+
+    #[test]
+    fn gap_before_leading_flank_missing() {
+        // Insertion right after a soft clip: q>0 so a "before" base exists (the clip
+        // base); here test a deletion with q at 0 boundary is not produced (no D first).
+        let ops = parse_cigar_str(b"2S2I2M").unwrap();
+        let qual = &[5u8, 5, 40, 40, 9, 9];
+        let ev = super::gap_events(&ops, qual);
+        // insertion at rec_q=2 (after 2S); max over idx1..=idx4 = 40
+        assert_eq!(ev, vec![(2, 40)]);
     }
 
     #[test]

@@ -177,14 +177,15 @@ fn process_record<W: Write>(
         let sites = choose_sites(record, &ops, &seq, ref_start, &aln.ctg, refgenome, &g);
         match sites {
             Some(sites) => {
-                let positions = dense::hq_positions(
-                    &sites,
-                    qual,
-                    strand,
-                    read_len,
-                    g.lead_hard,
-                    args.min_baseq,
-                );
+                // Combine substitutions (quality at their base) with gap opens
+                // (quality = max over the gap + flanking bases).
+                let mut events: Vec<(usize, u8)> = sites
+                    .iter()
+                    .map(|s| (s.rec_q, qual.get(s.rec_q).copied().unwrap_or(0)))
+                    .collect();
+                events.extend(mismatch::gap_events(&ops, qual));
+                let positions =
+                    dense::hq_positions(&events, strand, read_len, g.lead_hard, args.min_baseq);
                 dense::emit_d_lines(
                     out,
                     &name,
