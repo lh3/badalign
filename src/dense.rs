@@ -123,9 +123,13 @@ pub fn emit_d_lines<W: Write>(
             Some(v) => v,
             None => continue,
         };
+        // Count of mismatches + gap opens inside the dense interval (positions is
+        // sorted; flanking events are excluded).
+        let n =
+            positions.partition_point(|&p| p < dend) - positions.partition_point(|&p| p < dstart);
         write!(
             w,
-            "D\t{name}\t{read_len}\t{estart}\t{eend}\t{dstart}\t{dend}\t"
+            "D\t{name}\t{read_len}\t{estart}\t{eend}\t{dstart}\t{dend}\t{n}\t"
         )?;
         w.write_all(&seq)?;
         writeln!(

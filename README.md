@@ -64,12 +64,14 @@ C  readName readLen extractStart extractEnd clipOffset extractSeq
 ### Type-2 — `D` (15 columns)
 
 ```
-D  readName readLen extractStart extractEnd denseStart denseEnd extractSeq
+D  readName readLen extractStart extractEnd denseStart denseEnd nMismatch extractSeq
    readStart readEnd strand ctg ctgStart ctgEnd mapq
 ```
 
 - `denseStart/denseEnd` bound the mismatch-dense region (first→last high-quality
   mismatch of a qualifying stretch; overlapping windows are merged).
+- `nMismatch` is the number of mismatches + gap opens inside the dense interval
+  `[denseStart, denseEnd)` (flanking events are not counted).
 - `extractStart/End` add `-l` bp of flanking either side of the dense region.
 - The remaining columns describe the alignment the region belongs to.
 
