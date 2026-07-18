@@ -1,3 +1,6 @@
+> [!Warning]
+> This project is vibe coded with Claude Code.
+
 # badalign
 
 Extract *bad* read alignments from a BAM file. Two kinds of problems are reported,
