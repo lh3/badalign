@@ -8,7 +8,7 @@ both as TAB-delimited lines:
 
 - **Type-1 (`C`)** — long clips (default ≥40 bp) at the primary alignment's clip
   boundaries. Useful for finding chimeric/misassembled reads and breakpoints.
-- **Type-2 (`D`)** — mismatch-dense regions (default ≥5 high-quality ≥Q20
+- **Type-2 (`D`)** — mismatch-dense regions (default ≥10 high-quality ≥Q20
   mismatches within a 100 bp window). Useful for finding noisy / mis-mapped stretches.
 
 Built on [`noodles`](https://github.com/zaeleus/noodles) for BAM/FASTA I/O.
@@ -80,12 +80,14 @@ D  id readName readLen extractStart extractEnd denseStart denseEnd nMismatch ext
    readStart readEnd strand ctg ctgStart ctgEnd mapq
 ```
 
-- `denseStart/denseEnd` bound the mismatch-dense region (first→last high-quality
-  mismatch of a qualifying stretch; overlapping windows are merged).
+- `denseStart/denseEnd` bound the mismatch-dense region **in read coordinates**
+  (first→last high-quality mismatch of a qualifying stretch; overlapping windows merged).
+- `ctgStart/ctgEnd` are the same dense region **in reference coordinates** (min→max
+  reference position of its events, half-open) — not the whole alignment's span.
 - `nMismatch` is the number of mismatches + gap opens inside the dense interval
   `[denseStart, denseEnd)` (flanking events are not counted).
 - `extractStart/End` add `-l` bp of flanking either side of the dense region.
-- The remaining columns describe the alignment the region belongs to.
+- `readStart/readEnd`, `strand`, `ctg`, `mapq` describe the alignment the region belongs to.
 
 A "mismatch" here is either a **substitution** (base quality ≥ `-Q` at that base) or
 a **gap open** — one event per insertion/deletion regardless of length (gap

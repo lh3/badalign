@@ -189,12 +189,13 @@ fn process_record<W: Write>(
         match sites {
             Some(sites) => {
                 // Combine substitutions (quality at their base) with gap opens
-                // (quality = max over the gap + flanking bases).
-                let mut events: Vec<(usize, u8)> = sites
+                // (quality = max over the gap + flanking bases). Each event carries
+                // its reference position so the dense region's ref span can be found.
+                let mut events: Vec<(usize, usize, u8)> = sites
                     .iter()
-                    .map(|s| (s.rec_q, qual.get(s.rec_q).copied().unwrap_or(0)))
+                    .map(|s| (s.rec_q, s.ref_pos, qual.get(s.rec_q).copied().unwrap_or(0)))
                     .collect();
-                events.extend(mismatch::gap_events(&ops, qual));
+                events.extend(mismatch::gap_events(&ops, ref_start, qual));
                 let positions =
                     dense::hq_positions(&events, strand, read_len, g.lead_hard, args.min_baseq);
                 dense::emit_d_lines(

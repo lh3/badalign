@@ -39,6 +39,8 @@ Processing is **streaming and order-agnostic** (`main.rs::process_record` is cal
 
 **C lines come only from the primary** (`clip.rs`). The read's other chimeric segments are reconstructed from the primary's **`SA` tag** (`align.rs::parse_sa`), *not* from the supplementary records — this is deliberate so it works regardless of sort order. At most two C lines per primary (its 5' and 3' clip). A terminal clip with no neighbouring segment prints `-1`/`*` placeholders.
 
+On a D line, `ctgStart/ctgEnd` are the **dense region's** reference span (min→max event ref, half-open), not the whole alignment — mismatch events carry `ref_pos` (`mismatch.rs`) which `hq_positions` keeps as `(fwd_pos, ref_pos)` pairs so `emit_d_lines` can derive it.
+
 **D lines come from every mapped record** with base quality (`dense.rs`). Substitution positions come from a source chosen in priority order in `main.rs::choose_sites`: reference (`-r`) > `cs` > `MD` > CIGAR `X` (`mismatch.rs::from_reference`/`from_cs`/`from_md`/`from_cigar_x`). **Gate:** a D line requires base quality AND one of those substitution sources — do not loosen this (e.g. gap-only D lines were explicitly declined). Gap opens (`mismatch.rs::gap_events`) are added to the count only for records that already pass the gate; they come from the CIGAR (`I`/`D`, one event each, `N` excluded) with quality = max over the gap plus flanking bases. The sliding-window merge that turns events into regions is `dense.rs::dense_regions`.
 
 ## Conventions / invariants to preserve

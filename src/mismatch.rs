@@ -12,9 +12,7 @@ use crate::align::CigarOps;
 
 pub struct Site {
     pub rec_q: usize,
-    /// Reference position of the substitution (retained for future reference-based
-    /// reporting; not currently emitted).
-    #[allow(dead_code)]
+    /// 0-based reference position of the substitution.
     pub ref_pos: usize,
 }
 
@@ -85,14 +83,15 @@ pub fn from_cigar_x(ops: &CigarOps) -> Vec<Site> {
 }
 
 /// Enumerate gap-open events (one per `I`/`D` op; length is ignored, so gap
-/// *extensions* don't count). Returns `(rec_q, baseq)` where `rec_q` is the SEQ
-/// index at the gap and `baseq` is the gap's base quality: the highest quality
-/// among the read bases in the gap plus the read bases immediately before/after.
-/// A deletion has no read bases in the gap, so it uses only its two flanks.
-/// Introns (`N`) are not gaps.
-pub fn gap_events(ops: &CigarOps, qual: &[u8]) -> Vec<(usize, u8)> {
+/// *extensions* don't count). Returns `(rec_q, ref_pos, baseq)` where `rec_q` is
+/// the SEQ index and `ref_pos` the 0-based reference position at the gap, and
+/// `baseq` is the gap's base quality: the highest quality among the read bases in
+/// the gap plus the read bases immediately before/after. A deletion has no read
+/// bases in the gap, so it uses only its two flanks. Introns (`N`) are not gaps.
+pub fn gap_events(ops: &CigarOps, ref_start: usize, qual: &[u8]) -> Vec<(usize, usize, u8)> {
     let mut out = Vec::new();
     let mut q = 0usize; // SEQ index
+    let mut r = ref_start; // reference position
     for &(len, k) in ops {
         match k {
             b'I' => {
@@ -100,7 +99,7 @@ pub fn gap_events(ops: &CigarOps, qual: &[u8]) -> Vec<(usize, u8)> {
                 let lo = q.saturating_sub(1);
                 let hi = (q + len + 1).min(qual.len());
                 if let Some(bq) = qual.get(lo..hi).and_then(|s| s.iter().copied().max()) {
-                    out.push((q, bq));
+                    out.push((q, r, bq));
                 }
                 q += len;
             }
@@ -109,11 +108,17 @@ pub fn gap_events(ops: &CigarOps, qual: &[u8]) -> Vec<(usize, u8)> {
                 let lo = q.saturating_sub(1);
                 let hi = (q + 1).min(qual.len());
                 if let Some(bq) = qual.get(lo..hi).and_then(|s| s.iter().copied().max()) {
-                    out.push((q, bq));
+                    out.push((q, r, bq));
                 }
+                r += len;
             }
-            b'M' | b'=' | b'X' | b'S' => q += len,
-            _ => {} // N, H, P
+            b'M' | b'=' | b'X' => {
+                q += len;
+                r += len;
+            }
+            b'S' => q += len,
+            b'N' => r += len,
+            _ => {} // H, P
         }
     }
     out
@@ -315,42 +320,42 @@ mod tests {
 
     #[test]
     fn gap_insertion_uses_max_over_gap_and_flanks() {
-        // 3M 2I 3M ; qual per SEQ base (len 8).
+        // 3M 2I 3M ; qual per SEQ base (len 8). ref_start=100 -> event ref 103.
         let ops = parse_cigar_str(b"3M2I3M").unwrap();
         // indices:           0  1  2 | 3  4 | 5  6  7
         let qual = &[10u8, 10, 30, 5, 5, 40, 10, 10]; // flanks 30 (idx2) & 40 (idx5)
-        let ev = super::gap_events(&ops, qual);
-        // one insertion event at rec_q=3, baseq = max(idx2..=idx5) = 40
-        assert_eq!(ev, vec![(3, 40)]);
+        let ev = super::gap_events(&ops, 100, qual);
+        // one insertion event at rec_q=3, ref 103, baseq = max(idx2..=idx5) = 40
+        assert_eq!(ev, vec![(3, 103, 40)]);
     }
 
     #[test]
     fn gap_deletion_uses_two_flanks() {
-        // 3M 2D 3M ; deletion consumes no query, event at rec_q=3.
+        // 3M 2D 3M ; deletion consumes no query, event at rec_q=3, ref 3.
         let ops = parse_cigar_str(b"3M2D3M").unwrap();
         let qual = &[10u8, 10, 25, 33, 10, 10]; // flanks idx2=25, idx3=33
-        let ev = super::gap_events(&ops, qual);
-        assert_eq!(ev, vec![(3, 33)]);
+        let ev = super::gap_events(&ops, 0, qual);
+        assert_eq!(ev, vec![(3, 3, 33)]);
     }
 
     #[test]
     fn gap_length_is_ignored_one_event_each() {
         let ops = parse_cigar_str(b"5M3I5M4D5M").unwrap();
         let qual = &[20u8; 22]; // 5+3+5+5 = 18 SEQ bases... pad extra is fine
-        let ev = super::gap_events(&ops, qual);
-        // insertion at 5, deletion at 5+3+5=13
-        assert_eq!(ev, vec![(5, 20), (13, 20)]);
+        let ev = super::gap_events(&ops, 0, qual);
+        // insertion at q=5 (ref 5); deletion at q=13 (ref after 5M+5M = 10)
+        assert_eq!(ev, vec![(5, 5, 20), (13, 10, 20)]);
     }
 
     #[test]
     fn gap_before_leading_flank_missing() {
         // Insertion right after a soft clip: q>0 so a "before" base exists (the clip
-        // base); here test a deletion with q at 0 boundary is not produced (no D first).
+        // base). Soft clip does not consume reference, so ref stays at ref_start.
         let ops = parse_cigar_str(b"2S2I2M").unwrap();
         let qual = &[5u8, 5, 40, 40, 9, 9];
-        let ev = super::gap_events(&ops, qual);
-        // insertion at rec_q=2 (after 2S); max over idx1..=idx4 = 40
-        assert_eq!(ev, vec![(2, 40)]);
+        let ev = super::gap_events(&ops, 0, qual);
+        // insertion at rec_q=2 (after 2S), ref 0; max over idx1..=idx4 = 40
+        assert_eq!(ev, vec![(2, 0, 40)]);
     }
 
     #[test]

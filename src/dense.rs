@@ -3,19 +3,20 @@
 use crate::align::{extract, Aln};
 use std::io::{self, Write};
 
-/// Map mismatch events `(rec_q, baseq)` to sorted read-forward positions, keeping
-/// only high-quality ones. `rec_q` indexes the record SEQ; `lead_hard` is the
-/// record's leading hard-clip length (0 for a primary).
+/// Map mismatch events `(rec_q, ref_pos, baseq)` to `(read-forward pos, ref_pos)`
+/// pairs, keeping only high-quality ones and sorting by read-forward position.
+/// `rec_q` indexes the record SEQ; `lead_hard` is the record's leading hard-clip
+/// length (0 for a primary).
 pub fn hq_positions(
-    events: &[(usize, u8)],
+    events: &[(usize, usize, u8)],
     strand: u8,
     read_len: usize,
     lead_hard: usize,
     min_baseq: u8,
-) -> Vec<usize> {
-    let mut pos: Vec<usize> = events
+) -> Vec<(usize, usize)> {
+    let mut pos: Vec<(usize, usize)> = events
         .iter()
-        .filter_map(|&(rec_q, bq)| {
+        .filter_map(|&(rec_q, ref_pos, bq)| {
             if bq < min_baseq {
                 return None;
             }
@@ -24,10 +25,10 @@ pub fn hq_positions(
             } else {
                 read_len - 1 - lead_hard - rec_q
             };
-            Some(fwd)
+            Some((fwd, ref_pos))
         })
         .collect();
-    pos.sort_unstable();
+    pos.sort_unstable_by_key(|&(fwd, _)| fwd);
     pos
 }
 
@@ -109,7 +110,7 @@ pub fn emit_d_lines<W: Write>(
     name: &str,
     seg: u8,
     aln: &Aln,
-    positions: &[usize],
+    positions: &[(usize, usize)],
     fwd_seq: &[u8],
     off: usize,
     read_len: usize,
@@ -117,17 +118,26 @@ pub fn emit_d_lines<W: Write>(
     min_mismatch: usize,
     flank: usize,
 ) -> io::Result<()> {
-    for (dstart, dend) in dense_regions(positions, window, min_mismatch) {
+    let fwd: Vec<usize> = positions.iter().map(|&(f, _)| f).collect();
+    for (dstart, dend) in dense_regions(&fwd, window, min_mismatch) {
         let want_start = dstart.saturating_sub(flank);
         let want_end = (dend + flank).min(read_len);
         let (estart, eend, seq) = match extract(fwd_seq, off, want_start, want_end) {
             Some(v) => v,
             None => continue,
         };
-        // Count of mismatches + gap opens inside the dense interval (positions is
-        // sorted; flanking events are excluded).
-        let n =
-            positions.partition_point(|&p| p < dend) - positions.partition_point(|&p| p < dstart);
+        // Events inside the dense interval (positions is sorted by read-forward pos).
+        let lo = positions.partition_point(|&(f, _)| f < dstart);
+        let hi = positions.partition_point(|&(f, _)| f < dend);
+        let region = &positions[lo..hi];
+        if region.is_empty() {
+            continue;
+        }
+        // Count of mismatches + gap opens in the interval (flanks excluded).
+        let n = region.len();
+        // Reference span of the dense region (min..max event ref, half-open); strand-safe.
+        let ctg_start = region.iter().map(|&(_, r)| r).min().unwrap();
+        let ctg_end = region.iter().map(|&(_, r)| r).max().unwrap() + 1;
         // D<TAB>id<TAB>readName<TAB>... where id = readName_seg_D_extractStart_extractEnd.
         write!(
             w,
@@ -137,13 +147,7 @@ pub fn emit_d_lines<W: Write>(
         writeln!(
             w,
             "\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            aln.q_start,
-            aln.q_end,
-            aln.strand as char,
-            aln.ctg,
-            aln.ref_start,
-            aln.ref_end,
-            aln.mapq
+            aln.q_start, aln.q_end, aln.strand as char, aln.ctg, ctg_start, ctg_end, aln.mapq
         )?;
     }
     Ok(())
