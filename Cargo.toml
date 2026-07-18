@@ -1,0 +1,13 @@
+[package]
+name = "badalign"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+noodles = { version = "0.112", features = ["bam", "sam", "fasta", "bgzf"] }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
