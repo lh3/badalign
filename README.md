@@ -46,10 +46,19 @@ All coordinates are **0-based, half-open** (BED convention). Read-based position
 (`readStart/End`, `extractStart/End`, `clipOffset`, `denseStart/End`) and
 `extractSeq` are in the **original read** (read `+` strand, 5'→3') frame.
 
-### Type-1 — `C` (21 columns)
+Every line's first data column (before `readName`) is an **id**
+`readName_<seg>_<T>_<extractStart>_<extractEnd>`:
+- `<seg>` — `0` single-end, `1`/`2` first/second mate of a paired-end read;
+- `<T>` — `C` or `D`;
+- `<extractStart>`, `<extractEnd>` — the line's own extract coordinates.
+
+The id is self-contained, so output streams in BAM order (no buffering). It may collide
+only if two lines of the same read+mate+type share the same extract window (very rare).
+
+### Type-1 — `C` (22 columns)
 
 ```
-C  readName readLen extractStart extractEnd clipOffset extractSeq
+C  id readName readLen extractStart extractEnd clipOffset extractSeq
    readStart1 readEnd1 strand1 ctg1 ctgStart1 ctgEnd1 mapq1
    readStart2 readEnd2 strand2 ctg2 ctgStart2 ctgEnd2 mapq2
 ```
@@ -64,10 +73,10 @@ C  readName readLen extractStart extractEnd clipOffset extractSeq
   segment *after*; segments are ordered by their position on the read. A missing
   neighbour (a terminal clip) is written as `-1` (integers) and `*` (strand/contig).
 
-### Type-2 — `D` (15 columns)
+### Type-2 — `D` (17 columns)
 
 ```
-D  readName readLen extractStart extractEnd denseStart denseEnd nMismatch extractSeq
+D  id readName readLen extractStart extractEnd denseStart denseEnd nMismatch extractSeq
    readStart readEnd strand ctg ctgStart ctgEnd mapq
 ```
 

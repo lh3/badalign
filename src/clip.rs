@@ -11,6 +11,7 @@ use std::io::{self, Write};
 pub fn emit_c_lines<W: Write>(
     w: &mut W,
     name: &str,
+    seg: u8,
     primary: &Aln,
     sa: &[Aln],
     fwd_read: &[u8],
@@ -38,6 +39,7 @@ pub fn emit_c_lines<W: Write>(
         emit_one(
             w,
             name,
+            seg,
             read_len,
             fwd_read,
             off,
@@ -60,6 +62,7 @@ pub fn emit_c_lines<W: Write>(
         emit_one(
             w,
             name,
+            seg,
             read_len,
             fwd_read,
             off,
@@ -76,6 +79,7 @@ pub fn emit_c_lines<W: Write>(
 fn emit_one<W: Write>(
     w: &mut W,
     name: &str,
+    seg: u8,
     read_len: usize,
     fwd_read: &[u8],
     off: usize,
@@ -90,9 +94,10 @@ fn emit_one<W: Write>(
         Some(v) => v,
         None => return Ok(()),
     };
+    // C<TAB>id<TAB>readName<TAB>... where id = readName_seg_C_extractStart_extractEnd.
     write!(
         w,
-        "C\t{name}\t{read_len}\t{estart}\t{eend}\t{clip_offset}\t"
+        "C\t{name}_{seg}_C_{estart}_{eend}\t{name}\t{read_len}\t{estart}\t{eend}\t{clip_offset}\t"
     )?;
     w.write_all(&seq)?;
     write!(w, "\t")?;

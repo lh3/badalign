@@ -107,6 +107,7 @@ mod tests {
 pub fn emit_d_lines<W: Write>(
     w: &mut W,
     name: &str,
+    seg: u8,
     aln: &Aln,
     positions: &[usize],
     fwd_seq: &[u8],
@@ -127,9 +128,10 @@ pub fn emit_d_lines<W: Write>(
         // sorted; flanking events are excluded).
         let n =
             positions.partition_point(|&p| p < dend) - positions.partition_point(|&p| p < dstart);
+        // D<TAB>id<TAB>readName<TAB>... where id = readName_seg_D_extractStart_extractEnd.
         write!(
             w,
-            "D\t{name}\t{read_len}\t{estart}\t{eend}\t{dstart}\t{dend}\t{n}\t"
+            "D\t{name}_{seg}_D_{estart}_{eend}\t{name}\t{read_len}\t{estart}\t{eend}\t{dstart}\t{dend}\t{n}\t"
         )?;
         w.write_all(&seq)?;
         writeln!(

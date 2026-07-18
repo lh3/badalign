@@ -44,6 +44,7 @@ Processing is **streaming and order-agnostic** (`main.rs::process_record` is cal
 ## Conventions / invariants to preserve
 
 - All emitted positions are **0-based, half-open** (BED convention).
-- Column counts are fixed: **C = 21**, **D = 16**. Adding/removing a field breaks downstream parsing — update `README.md` and the output writers together.
+- Every line starts with a type letter (`C`/`D`) then an **id** `readName_<seg>_<T>_<extractStart>_<extractEnd>` (`<seg>` = 0 single-end / 1,2 mates). The id is computed from each line's own fields, so the emit functions write directly and output streams in BAM order — no buffering. It may rarely collide (two lines of a read+mate+type with the same extract window).
+- Column counts are fixed: **C = 22**, **D = 17**. Adding/removing a field breaks downstream parsing — update `README.md` and the output writers together.
 - When touching D-line counting, verify by independently recomputing events (substitutions + gap opens with the max-flank quality rule) and the window/merge, comparing `denseStart/denseEnd` per record across both strands and hard-clipped supplementaries — unit tests alone won't catch coordinate-frame regressions.
 - CIGAR is handled as a flat `Vec<(usize, u8)>` (`align::CigarOps`) with op letters `M I D N S H P = X`; `main::kind_byte` maps noodles' `Kind` into these.

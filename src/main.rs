@@ -34,7 +34,6 @@ fn main() -> Result<()> {
 
     let stdout = io::stdout();
     let mut out = BufWriter::new(stdout.lock());
-
     for result in reader.records() {
         let record = result.context("reading BAM record")?;
         process_record(&mut out, &record, &ref_names, refgenome.as_ref(), &args)?;
@@ -86,6 +85,17 @@ fn process_record<W: Write>(
         return Ok(());
     }
     let is_primary = !flags.is_supplementary();
+
+    // Segment: 0 = single-end, 1/2 = first/second mate of a pair.
+    let seg: u8 = if !flags.is_segmented() {
+        0
+    } else if flags.is_first_segment() {
+        1
+    } else if flags.is_last_segment() {
+        2
+    } else {
+        0
+    };
 
     // CIGAR -> flat ops.
     let mut ops = Vec::new();
@@ -160,6 +170,7 @@ fn process_record<W: Write>(
         clip::emit_c_lines(
             out,
             &name,
+            seg,
             &aln,
             &sa,
             &fwd_seq,
@@ -189,6 +200,7 @@ fn process_record<W: Write>(
                 dense::emit_d_lines(
                     out,
                     &name,
+                    seg,
                     &aln,
                     &positions,
                     &fwd_seq,
