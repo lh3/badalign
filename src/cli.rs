@@ -32,6 +32,10 @@ pub struct Args {
     #[arg(short = 'g', value_name = "INT", default_value_t = 100)]
     pub max_gap: usize,
 
+    /// Ignore an alignment shorter than FLOAT*readLen on the read (type-1).
+    #[arg(short = 'f', value_name = "FLOAT", default_value_t = 0.2)]
+    pub min_frac: f64,
+
     /// Minimum number of high-quality mismatches in a window (type-2).
     #[arg(short = 'm', value_name = "INT", default_value_t = 10)]
     pub min_mismatch: usize,

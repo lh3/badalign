@@ -32,6 +32,7 @@ Options:
   -w INT    window length to scan for a dense region (type-2) [100]
   -c INT    min clip length to report (type-1) [40]
   -g INT    max gap or overlap between adjacent alignments for a C-line (type-1) [100]
+  -f FLOAT  ignore an alignment shorter than FLOAT*readLen on the read (type-1) [0.2]
   -m INT    min mismatches in a window (type-2) [10]
 ```
 
@@ -83,8 +84,8 @@ C  id readName readLen extractStart extractEnd clipOffset extractSeq
 
 The read's segments are the primary alignment plus the segments in its `SA` tag
 (C-lines are produced only while processing the primary record; supplementary/secondary
-records are not read directly). A segment whose read interval is contained in a longer
-one is dropped. A C-line is then emitted at each boundary of the remaining segment chain:
+records are not read directly). A segment shorter than `-f`×`readLen` on the read is
+ignored, and a segment whose read interval is contained in a longer one is dropped. A C-line is then emitted at each boundary of the remaining segment chain:
 the two **terminal** clips (each reported when its clip length is ≥ `-c`) and each
 **internal** junction between consecutive segments (reported when the gap or overlap
 between them is ≤ `-g` — this suppresses junctions whose extract would span most of the

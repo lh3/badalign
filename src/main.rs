@@ -177,6 +177,7 @@ fn process_record<W: Write>(
             read_len,
             args.min_clip,
             args.max_gap,
+            args.min_frac,
             args.flank,
         )?;
     }

@@ -41,11 +41,15 @@ pub fn emit_c_lines<W: Write>(
     read_len: usize,
     min_clip: usize,
     max_gap: usize,
+    min_frac: f64,
     flank: usize,
 ) -> io::Result<()> {
     let mut all: Vec<&Aln> = Vec::with_capacity(1 + sa.len());
     all.push(primary);
     all.extend(sa.iter());
+    // Ignore alignments whose read span is shorter than min_frac * readLen.
+    let min_len = min_frac * read_len as f64;
+    all.retain(|a| (a.q_end - a.q_start) as f64 >= min_len);
     // Filter out contained alignments (uniformly — the primary may be removed),
     // then order the remaining chain along the read.
     let mut chain = remove_contained(&all);
