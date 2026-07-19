@@ -26,7 +26,8 @@ cargo build --release
 badalign [options] aln.bam
 
 Options:
-  -r FILE   reference genome FASTA (loaded fully into RAM)
+  -d        output type-2 (D) mismatch-dense lines (off by default)
+  -r FILE   reference genome FASTA (loaded fully into RAM; only used with -d)
   -l INT    length of flanking regions around a clip / dense region [250]
   -Q INT    min base quality for a mismatch to count (type-2) [20]
   -w INT    window length to scan for a dense region (type-2) [100]
@@ -116,8 +117,9 @@ counts when that quality is ≥ `-Q`.
 
 ## Type-2 requirements
 
-A `D` line needs both base qualities **and** a source of mismatch positions. The
-source is chosen in priority order:
+`D` lines are emitted only when **`-d`** is given (off by default). A `D` line also
+needs both base qualities **and** a source of mismatch positions. The source is chosen
+in priority order:
 
 1. reference genome via `-r`,
 2. a `cs` tag,

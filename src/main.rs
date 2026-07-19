@@ -17,9 +17,11 @@ use std::sync::Once;
 fn main() -> Result<()> {
     let args = cli::Args::parse();
 
-    let refgenome = match &args.reference {
-        Some(p) => Some(RefGenome::load(p).context("loading reference genome")?),
-        None => None,
+    // The reference is only a D-line mismatch source, so skip loading it (and its
+    // ~3 GB of RAM) unless D-lines are requested.
+    let refgenome = match (&args.reference, args.emit_d) {
+        (Some(p), true) => Some(RefGenome::load(p).context("loading reference genome")?),
+        _ => None,
     };
 
     let mut reader = noodles::bam::io::reader::Builder
@@ -182,10 +184,10 @@ fn process_record<W: Write>(
         )?;
     }
 
-    // --- Type-2 (D) lines: any record with base quality + a mismatch source ---
+    // --- Type-2 (D) lines: opt-in via -d; any record with base quality + a source ---
     let qual = record.quality_scores();
     let qual = qual.as_bytes();
-    if !qual.is_empty() {
+    if args.emit_d && !qual.is_empty() {
         let sites = choose_sites(record, &ops, &seq, ref_start, &aln.ctg, refgenome, &g);
         match sites {
             Some(sites) => {

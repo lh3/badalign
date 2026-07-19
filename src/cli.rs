@@ -39,4 +39,8 @@ pub struct Args {
     /// Minimum number of high-quality mismatches in a window (type-2).
     #[arg(short = 'm', value_name = "INT", default_value_t = 10)]
     pub min_mismatch: usize,
+
+    /// Output type-2 (D) mismatch-dense lines (off by default).
+    #[arg(short = 'd')]
+    pub emit_d: bool,
 }
