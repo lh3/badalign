@@ -19,7 +19,6 @@ pub struct Aln {
     pub mapq: i32,      // -1 if missing
     pub q_start: usize, // read-forward coords, 0-based half-open
     pub q_end: usize,
-    pub is_primary: bool,
 }
 
 /// Geometry derived from a single CIGAR.
@@ -171,7 +170,6 @@ pub fn parse_sa(sa: &[u8], read_len: usize) -> Vec<Aln> {
             mapq,
             q_start,
             q_end,
-            is_primary: false,
         });
     }
     out

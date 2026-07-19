@@ -28,6 +28,10 @@ pub struct Args {
     #[arg(short = 'c', value_name = "INT", default_value_t = 40)]
     pub min_clip: usize,
 
+    /// Max gap or overlap (bp) between adjacent alignments for a C-line (type-1).
+    #[arg(short = 'g', value_name = "INT", default_value_t = 100)]
+    pub max_gap: usize,
+
     /// Minimum number of high-quality mismatches in a window (type-2).
     #[arg(short = 'm', value_name = "INT", default_value_t = 10)]
     pub min_mismatch: usize,

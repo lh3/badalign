@@ -6,8 +6,8 @@
 Extract *bad* read alignments from a BAM file. Two kinds of problems are reported,
 both as TAB-delimited lines:
 
-- **Type-1 (`C`)** — long clips (default ≥40 bp) at the primary alignment's clip
-  boundaries. Useful for finding chimeric/misassembled reads and breakpoints.
+- **Type-1 (`C`)** — junctions of a read's alignment chain (long clips and chimeric
+  breakpoints). Useful for finding chimeric/misassembled reads and breakpoints.
 - **Type-2 (`D`)** — mismatch-dense regions (default ≥10 high-quality ≥Q20
   mismatches within a 100 bp window). Useful for finding noisy / mis-mapped stretches.
 
@@ -31,6 +31,7 @@ Options:
   -Q INT    min base quality for a mismatch to count (type-2) [20]
   -w INT    window length to scan for a dense region (type-2) [100]
   -c INT    min clip length to report (type-1) [40]
+  -g INT    max gap or overlap between adjacent alignments for a C-line (type-1) [100]
   -m INT    min mismatches in a window (type-2) [10]
 ```
 
@@ -46,11 +47,15 @@ All coordinates are **0-based, half-open** (BED convention). Read-based position
 (`readStart/End`, `extractStart/End`, `clipOffset`, `denseStart/End`) and
 `extractSeq` are in the **original read** (read `+` strand, 5'→3') frame.
 
-Every line's first data column (before `readName`) is an **id**
-`readName_<seg>_<T>_<extractStart>_<extractEnd>`:
-- `<seg>` — `0` single-end, `1`/`2` first/second mate of a paired-end read;
-- `<T>` — `C` or `D`;
-- `<extractStart>`, `<extractEnd>` — the line's own extract coordinates.
+Every line's first data column (before `readName`) is an **id**:
+- C: `readName_<seg>_C_<extractStart>_<extractEnd>_<leftflank>_<rightflank>`
+- D: `readName_<seg>_D_<extractStart>_<extractEnd>`
+
+where `<seg>` is `0` single-end / `1`/`2` first/second mate of a paired-end read. For C,
+`leftflank = readEnd1 − extractStart` and `rightflank = extractEnd − readStart2` measure how
+much of the extract the previous/next alignment covers (`0` when that neighbour is absent, and
+signed — a large gap can make a flank negative). `leftflank + rightflank` exceeds the extract
+length exactly when the two adjacent alignments overlap on the read.
 
 The id is self-contained, so output streams in BAM order (no buffering). It may collide
 only if two lines of the same read+mate+type share the same extract window (very rare).
@@ -63,8 +68,11 @@ C  id readName readLen extractStart extractEnd clipOffset extractSeq
    readStart2 readEnd2 strand2 ctg2 ctgStart2 ctgEnd2 mapq2
 ```
 
-- `extractSeq` is the read subsequence `[extractStart, extractEnd)` — up to `-l` bp
-  either side of `clipOffset`.
+- `extractSeq` is the read subsequence `[extractStart, extractEnd)`, spanning the whole
+  junction: `-l` bp outside `readEnd1` and `readStart2`, i.e.
+  `[min(readEnd1,readStart2) − l, max(readEnd1,readStart2) + l)`. This covers the entire
+  unaligned gap (or the overlapping region) plus `-l` of aligned flank on each side. For a
+  terminal clip (no neighbour on one side) it is `±-l` bp around the clip boundary.
 - `clipOffset` is the middle of the clip:
   - **(a)** clipped sequence is not aligned elsewhere → the clip boundary;
   - **(b/c)** the neighbouring segment aligns (gap **or** overlap) →
@@ -72,6 +80,15 @@ C  id readName readLen extractStart extractEnd clipOffset extractSeq
 - alignment 1 = the segment *before* the clip on the read, alignment 2 = the
   segment *after*; segments are ordered by their position on the read. A missing
   neighbour (a terminal clip) is written as `-1` (integers) and `*` (strand/contig).
+
+The read's segments are the primary alignment plus the segments in its `SA` tag
+(C-lines are produced only while processing the primary record; supplementary/secondary
+records are not read directly). A segment whose read interval is contained in a longer
+one is dropped. A C-line is then emitted at each boundary of the remaining segment chain:
+the two **terminal** clips (each reported when its clip length is ≥ `-c`) and each
+**internal** junction between consecutive segments (reported when the gap or overlap
+between them is ≤ `-g` — this suppresses junctions whose extract would span most of the
+read).
 
 ### Type-2 — `D` (17 columns)
 

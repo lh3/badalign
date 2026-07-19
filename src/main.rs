@@ -141,7 +141,6 @@ fn process_record<W: Write>(
         mapq,
         q_start,
         q_end,
-        is_primary,
     };
 
     let name = record
@@ -177,6 +176,7 @@ fn process_record<W: Write>(
             off,
             read_len,
             args.min_clip,
+            args.max_gap,
             args.flank,
         )?;
     }
